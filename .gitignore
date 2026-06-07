@@ -1,0 +1,14 @@
+# Root ignores
+node_modules/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# Next.js
+frontend/.next/
+frontend/out/
