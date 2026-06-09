@@ -30,3 +30,20 @@ services:
       - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
       - LANGCHAIN_TRACING_V2=true
     command: uv run python agent.py
+
+  # postgres:
+  #   image: pgvector/pgvector:pg16
+  #
+  #   environment:
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: postgres
+  #     POSTGRES_DB: compaign_ai
+  #
+  #   ports:
+  #     - "5432:5432"
+  #
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  # postgres_data:
