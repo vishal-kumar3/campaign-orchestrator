@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from app.db.models.enums import ContentPlatform, ContentStatus, enum_values
-from sqlalchemy import DateTime, Enum, ForeignKey, Text, func, text
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -11,6 +11,7 @@ from app.db.base import Base
 
 class CampaignContent(Base):
   __tablename__ = "campaign_contents"
+  __table_args__ = (Index("ix_campaign_contents_campaign_id", "campaign_id"),)
 
   id: Mapped[uuid.UUID] = mapped_column(
     UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")

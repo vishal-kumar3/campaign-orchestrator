@@ -10,6 +10,7 @@ from app.db.models.enums import (
   ContentStatus,
   DocumentStatus,
   KnowledgeScope,
+  LogLevel,
 )
 from app.db.models.knowledge_base import KnowledgeBase
 from app.db.models.research import ResearchSnapshot
@@ -24,6 +25,7 @@ __all__ = [
   "ContentPlatform",
   "ContentStatus",
   "AgentStatus",
+  "LogLevel",
   # Models
   "Workspace",
   "KnowledgeBase",

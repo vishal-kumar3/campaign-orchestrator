@@ -43,3 +43,9 @@ class AgentStatus(PyEnum):
   RUNNING = "running"
   COMPLETED = "completed"
   FAILED = "failed"
+
+
+class LogLevel(PyEnum):
+  INFO = "info"
+  WARNING = "warning"
+  ERROR = "error"

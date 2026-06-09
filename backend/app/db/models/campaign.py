@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime
 
-from app.db.models.enums import CampaignStatus, enum_values
-from sqlalchemy import ARRAY, DateTime, Enum, ForeignKey, String, Text, func, text
+from app.db.models.enums import CampaignStatus, ContentPlatform, enum_values
+from sqlalchemy import ARRAY, DateTime, Enum, ForeignKey, Index, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -11,6 +11,7 @@ from app.db.base import Base
 
 class Campaign(Base):
   __tablename__ = "campaigns"
+  __table_args__ = (Index("ix_campaigns_workspace_id", "workspace_id"),)
 
   id: Mapped[uuid.UUID] = mapped_column(
     UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
@@ -23,7 +24,16 @@ class Campaign(Base):
   objective: Mapped[str] = mapped_column(Text, nullable=False)
   target_audience: Mapped[str | None] = mapped_column(Text)
   region: Mapped[str | None] = mapped_column(Text)
-  platforms: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+  platforms: Mapped[list[ContentPlatform] | None] = mapped_column(
+    ARRAY(
+      Enum(
+        ContentPlatform,
+        name="content_platform",
+        values_callable=enum_values,
+        create_constraint=False,
+      )
+    )
+  )
 
   status: Mapped[CampaignStatus] = mapped_column(
     Enum(
@@ -44,6 +54,9 @@ class Campaign(Base):
 
   # Relationships
   workspace: Mapped["Workspace"] = relationship(back_populates="campaigns")
+  knowledge_bases: Mapped[list["KnowledgeBase"]] = relationship(
+    back_populates="campaign"
+  )
   research_snapshots: Mapped[list["ResearchSnapshot"]] = relationship(
     back_populates="campaign", cascade="all, delete-orphan"
   )

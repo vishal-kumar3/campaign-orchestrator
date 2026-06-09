@@ -3,7 +3,18 @@ from datetime import datetime
 
 from app.db.models.enums import DocumentStatus, enum_values
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import UUID, DateTime, Enum, ForeignKey, Integer, Text, func, text
+from sqlalchemy import (
+  UUID,
+  DateTime,
+  Enum,
+  ForeignKey,
+  Index,
+  Integer,
+  Text,
+  UniqueConstraint,
+  func,
+  text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -12,6 +23,7 @@ from app.db.base import Base
 
 class Document(Base):
   __tablename__ = "documents"
+  __table_args__ = (Index("ix_documents_knowledge_base_id", "knowledge_base_id"),)
 
   id: Mapped[uuid.UUID] = mapped_column(
     UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
@@ -49,6 +61,14 @@ class Document(Base):
 
 class DocumentChunk(Base):
   __tablename__ = "document_chunks"
+  __table_args__ = (
+    UniqueConstraint(
+      "document_id",
+      "chunk_index",
+      name="uq_document_chunks_document_chunk_index",
+    ),
+    Index("ix_document_chunks_document_id", "document_id"),
+  )
 
   id: Mapped[uuid.UUID] = mapped_column(
     UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
@@ -59,9 +79,8 @@ class DocumentChunk(Base):
 
   chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
   content: Mapped[str] = mapped_column(Text, nullable=False)
-  embedding: Mapped[list[float] | None] = mapped_column(Vector(3072))
+  embedding: Mapped[list[float] | None] = mapped_column(Vector(1536))
 
-  # 'metadata' is mapped to 'metadata_' to avoid conflicts with SQLAlchemy's internal MetaData object
   metadata_: Mapped[dict | None] = mapped_column("metadata", JSONB)
 
   created_at: Mapped[datetime] = mapped_column(

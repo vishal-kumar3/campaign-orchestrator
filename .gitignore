@@ -1,3 +1,6 @@
+
+plan.md
+
 # Root ignores
 node_modules/
 .env
@@ -12,3 +15,4 @@ venv/
 # Next.js
 frontend/.next/
 frontend/out/
+.eos/

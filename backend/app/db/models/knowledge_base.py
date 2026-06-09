@@ -2,7 +2,16 @@ import uuid
 from datetime import datetime
 
 from app.db.models.enums import KnowledgeScope, enum_values
-from sqlalchemy import DateTime, Enum, ForeignKey, String, func, text
+from sqlalchemy import (
+  CheckConstraint,
+  DateTime,
+  Enum,
+  ForeignKey,
+  Index,
+  String,
+  func,
+  text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -11,6 +20,19 @@ from app.db.base import Base
 
 class KnowledgeBase(Base):
   __tablename__ = "knowledge_bases"
+  __table_args__ = (
+    CheckConstraint(
+      "(scope = 'workspace' AND campaign_id IS NULL) OR "
+      "(scope = 'campaign' AND campaign_id IS NOT NULL)",
+      name="ck_knowledge_bases_scope_campaign_id",
+    ),
+    Index("ix_knowledge_bases_workspace_id", "workspace_id"),
+    Index(
+      "ix_knowledge_bases_campaign_id",
+      "campaign_id",
+      postgresql_where=text("campaign_id IS NOT NULL"),
+    ),
+  )
 
   id: Mapped[uuid.UUID] = mapped_column(
     UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
@@ -18,8 +40,11 @@ class KnowledgeBase(Base):
   workspace_id: Mapped[uuid.UUID] = mapped_column(
     UUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False
   )
-  # No FK constraint added here to match your SQL and avoid circular dependency issues during table creation
-  campaign_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+  campaign_id: Mapped[uuid.UUID | None] = mapped_column(
+    UUID(as_uuid=True),
+    ForeignKey("campaigns.id", ondelete="CASCADE"),
+    nullable=True,
+  )
 
   scope: Mapped[KnowledgeScope] = mapped_column(
     Enum(
@@ -38,6 +63,7 @@ class KnowledgeBase(Base):
 
   # Relationships
   workspace: Mapped["Workspace"] = relationship(back_populates="knowledge_bases")
+  campaign: Mapped["Campaign | None"] = relationship(back_populates="knowledge_bases")
   documents: Mapped[list["Document"]] = relationship(
     back_populates="knowledge_base", cascade="all, delete-orphan"
   )

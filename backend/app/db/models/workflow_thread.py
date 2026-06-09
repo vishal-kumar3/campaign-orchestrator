@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Text, func, text
+from sqlalchemy import DateTime, ForeignKey, Index, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -10,6 +10,10 @@ from app.db.base import Base
 
 class WorkflowThread(Base):
   __tablename__ = "workflow_threads"
+  __table_args__ = (
+    Index("ix_workflow_threads_campaign_id", "campaign_id"),
+    Index("ix_workflow_threads_thread_id", "thread_id", unique=True),
+  )
 
   id: Mapped[uuid.UUID] = mapped_column(
     UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
