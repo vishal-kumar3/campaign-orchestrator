@@ -9,8 +9,11 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    env_file:
+      - ./frontend/.env
     environment:
       - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
 
   backend:
     build:
@@ -19,31 +22,34 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/campaign_ai
+    depends_on:
+      - postgres
     command: uv run fastapi dev main.py --host 0.0.0.0 --port 8000
 
-  agents:
+  agent:
     build:
-      context: ./agents
+      context: ./agent
     volumes:
-      - ./agents:/app
+      - ./agent:/app
     environment:
-      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
-      - LANGCHAIN_TRACING_V2=true
-    command: uv run python agent.py
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY}
+      - LANGSMITH_TRACING=true
+    command: uv run python main.py
 
-  # postgres:
-  #   image: pgvector/pgvector:pg16
-  #
-  #   environment:
-  #     POSTGRES_USER: postgres
-  #     POSTGRES_PASSWORD: postgres
-  #     POSTGRES_DB: compaign_ai
-  #
-  #   ports:
-  #     - "5432:5432"
-  #
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: campaign_ai
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
 volumes:
-  # postgres_data:
+  postgres_data:
