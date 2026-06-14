@@ -47,6 +47,7 @@ class Document(Base):
     ),
     server_default=text("'pending'"),
   )
+  processing_error: Mapped[str | None] = mapped_column(Text)
 
   created_at: Mapped[datetime] = mapped_column(
     DateTime(timezone=True), server_default=func.now()

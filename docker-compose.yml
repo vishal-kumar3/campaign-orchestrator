@@ -22,10 +22,12 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - upload_data:/app/data/uploads
     env_file:
       - ./backend/.env
     environment:
       - DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/campaign_ai
+      - UPLOAD_DIR=/app/data/uploads
     depends_on:
       - postgres
     command: uv run fastapi dev main.py --host 0.0.0.0 --port 8000
@@ -53,3 +55,4 @@ services:
 
 volumes:
   postgres_data:
+  upload_data:

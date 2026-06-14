@@ -58,7 +58,11 @@ export function createApiClient(getToken: () => Promise<string | null>) {
       return data
     },
     async post<T>(path: string, body?: unknown, config?: AxiosRequestConfig): Promise<T> {
-      const { data } = await client.post<T>(path, body, config)
+      const headers =
+        body instanceof FormData
+          ? { ...config?.headers, 'Content-Type': undefined }
+          : config?.headers
+      const { data } = await client.post<T>(path, body, { ...config, headers })
       return data
     },
     async patch<T>(path: string, body?: unknown, config?: AxiosRequestConfig): Promise<T> {

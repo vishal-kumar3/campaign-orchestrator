@@ -4,10 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_owned_workspace
+from app.core.config import settings
 from app.db.models.enums import KnowledgeScope
 from app.db.models.knowledge_base import KnowledgeBase
 from app.db.models.workspace import Workspace
 from app.db.queries import campaign as campaign_queries
+from app.db.queries import document_chunk as document_chunk_queries
 from app.db.queries import knowledge_base as knowledge_base_queries
 from app.schemas.common import PaginatedResponse
 from app.schemas.knowledge_base import (
@@ -15,6 +17,8 @@ from app.schemas.knowledge_base import (
   KnowledgeBaseResponse,
   KnowledgeBaseUpdate,
 )
+from app.schemas.retrieve import RetrieveResponse, RetrievedChunk
+from app.services import embeddings
 
 router = APIRouter(
   prefix="/workspaces/{workspace_id}/knowledge-bases", tags=["knowledge-bases"]
@@ -82,6 +86,34 @@ def get_knowledge_base(
   knowledge_base: KnowledgeBase = Depends(_get_knowledge_base),
 ) -> KnowledgeBaseResponse:
   return knowledge_base
+
+
+@router.get("/{knowledge_base_id}/retrieve", response_model=RetrieveResponse)
+def retrieve_knowledge_base_chunks(
+  q: str = Query(min_length=1),
+  k: int = Query(default=settings.retrieve_default_k, ge=1, le=20),
+  knowledge_base: KnowledgeBase = Depends(_get_knowledge_base),
+  db: Session = Depends(get_db),
+) -> RetrieveResponse:
+  query_embedding = embeddings.embed_query(q)
+  results = document_chunk_queries.similarity_search(
+    db,
+    knowledge_base_id=knowledge_base.id,
+    query_embedding=query_embedding,
+    k=k,
+  )
+  chunks = [
+    RetrievedChunk(
+      chunk_id=chunk.id,
+      document_id=chunk.document_id,
+      chunk_index=chunk.chunk_index,
+      content=chunk.content,
+      score=max(0.0, 1.0 - distance),
+      metadata=chunk.metadata_,
+    )
+    for chunk, distance in results
+  ]
+  return RetrieveResponse(query=q, knowledge_base_id=knowledge_base.id, chunks=chunks)
 
 
 @router.patch("/{knowledge_base_id}", response_model=KnowledgeBaseResponse)

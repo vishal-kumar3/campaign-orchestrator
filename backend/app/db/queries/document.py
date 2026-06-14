@@ -18,6 +18,10 @@ def get_by_id_for_knowledge_base(
   )
 
 
+def get_by_id(session: Session, document_id: uuid.UUID) -> Document | None:
+  return session.get(Document, document_id)
+
+
 def list_for_knowledge_base(
   session: Session, knowledge_base_id: uuid.UUID, *, limit: int, offset: int
 ) -> tuple[list[Document], int]:
@@ -50,6 +54,62 @@ def create(
   session.commit()
   session.refresh(document)
   return document
+
+
+def create_pending(
+  session: Session,
+  *,
+  document_id: uuid.UUID,
+  knowledge_base_id: uuid.UUID,
+  file_name: str,
+  file_url: str,
+  mime_type: str | None,
+) -> Document:
+  document = Document(
+    id=document_id,
+    knowledge_base_id=knowledge_base_id,
+    file_name=file_name,
+    file_url=file_url,
+    mime_type=mime_type,
+    status=DocumentStatus.PENDING,
+  )
+  session.add(document)
+  session.commit()
+  session.refresh(document)
+  return document
+
+
+def update_status(
+  session: Session,
+  document: Document,
+  *,
+  status: DocumentStatus,
+  processing_error: str | None = None,
+) -> Document:
+  document.status = status
+  if processing_error is not None:
+    document.processing_error = processing_error
+  elif status != DocumentStatus.FAILED:
+    document.processing_error = None
+  session.commit()
+  session.refresh(document)
+  return document
+
+
+def count_indexed_for_knowledge_base(
+  session: Session, knowledge_base_id: uuid.UUID
+) -> int:
+  return (
+    session.scalar(
+      select(func.count())
+      .select_from(Document)
+      .where(
+        Document.knowledge_base_id == knowledge_base_id,
+        Document.status == DocumentStatus.INDEXED,
+      )
+    )
+    or 0
+  )
 
 
 def delete(session: Session, document: Document) -> None:

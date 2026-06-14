@@ -57,7 +57,37 @@ export interface Document {
   file_url: string
   mime_type: string | null
   status: DocumentStatus
+  processing_error?: string | null
   created_at: string
+}
+
+export interface DocumentUploadResponse {
+  document_id: string
+  file_name: string
+  file_url: string
+  mime_type: string | null
+  status: DocumentStatus
+}
+
+export interface DocumentProcessResponse {
+  document_id: string
+  status: DocumentStatus
+  message: string
+}
+
+export interface RetrievedChunk {
+  chunk_id: string
+  document_id: string
+  chunk_index: number
+  content: string
+  score: number
+  metadata: Record<string, unknown> | null
+}
+
+export interface RetrieveResponse {
+  query: string
+  knowledge_base_id: string
+  chunks: RetrievedChunk[]
 }
 
 export interface CampaignContent {

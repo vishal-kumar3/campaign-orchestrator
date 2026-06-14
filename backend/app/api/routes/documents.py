@@ -1,16 +1,30 @@
+import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_owned_workspace
+from app.core.config import settings
 from app.db.models.document import Document
+from app.db.models.enums import DocumentStatus
 from app.db.models.knowledge_base import KnowledgeBase
 from app.db.models.workspace import Workspace
 from app.db.queries import document as document_queries
+from app.db.queries import document_chunk as document_chunk_queries
 from app.db.queries import knowledge_base as knowledge_base_queries
+from app.db.session import SessionLocal
 from app.schemas.common import PaginatedResponse
-from app.schemas.document import DocumentCreate, DocumentResponse
+from app.schemas.document import (
+  DocumentCreate,
+  DocumentProcessResponse,
+  DocumentResponse,
+  DocumentUploadResponse,
+)
+from app.services.rag import ingest_document
+from app.services.storage import get_storage
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
   prefix="/workspaces/{workspace_id}/knowledge-bases/{knowledge_base_id}/documents",
@@ -49,6 +63,18 @@ def _get_document(
   return document
 
 
+def _run_ingestion(document_id: uuid.UUID) -> None:
+  db = SessionLocal()
+  try:
+    document = document_queries.get_by_id(db, document_id)
+    if document is None:
+      logger.error("Document %s not found for ingestion", document_id)
+      return
+    ingest_document(db, document)
+  finally:
+    db.close()
+
+
 @router.get("/", response_model=PaginatedResponse[DocumentResponse])
 def list_documents(
   knowledge_base: KnowledgeBase = Depends(_get_knowledge_base),
@@ -60,6 +86,45 @@ def list_documents(
     db, knowledge_base.id, limit=limit, offset=offset
   )
   return PaginatedResponse(items=items, total=total)
+
+
+@router.post("/upload", response_model=DocumentUploadResponse, status_code=201)
+async def upload_document(
+  file: UploadFile = File(...),
+  knowledge_base: KnowledgeBase = Depends(_get_knowledge_base),
+  workspace: Workspace = Depends(get_owned_workspace),
+  db: Session = Depends(get_db),
+) -> DocumentUploadResponse:
+  if file.content_type not in ("application/pdf", "application/x-pdf"):
+    raise HTTPException(status_code=422, detail="Only PDF files are supported")
+
+  data = await file.read()
+  if len(data) > settings.max_upload_bytes:
+    raise HTTPException(status_code=413, detail="File too large")
+  if not data:
+    raise HTTPException(status_code=422, detail="Empty file")
+
+  document_id = uuid.uuid4()
+  storage = get_storage()
+  file_name = file.filename or "document.pdf"
+  key = storage.build_key(workspace.id, knowledge_base.id, document_id, file_name)
+  storage.save(key, data)
+
+  document = document_queries.create_pending(
+    db,
+    document_id=document_id,
+    knowledge_base_id=knowledge_base.id,
+    file_name=file_name,
+    file_url=key,
+    mime_type=file.content_type,
+  )
+  return DocumentUploadResponse(
+    document_id=document.id,
+    file_name=document.file_name,
+    file_url=document.file_url,
+    mime_type=document.mime_type,
+    status=document.status,
+  )
 
 
 @router.post("/", response_model=DocumentResponse, status_code=201)
@@ -77,6 +142,23 @@ def create_document(
   )
 
 
+@router.post("/{document_id}/process", response_model=DocumentProcessResponse, status_code=202)
+def process_document(
+  background_tasks: BackgroundTasks,
+  document: Document = Depends(_get_document),
+  db: Session = Depends(get_db),
+) -> DocumentProcessResponse:
+  if document.status == DocumentStatus.PROCESSING:
+    raise HTTPException(status_code=409, detail="Document is already processing")
+
+  if document.status == DocumentStatus.INDEXED:
+    document_chunk_queries.delete_for_document(db, document.id)
+
+  document_queries.update_status(db, document, status=DocumentStatus.PROCESSING)
+  background_tasks.add_task(_run_ingestion, document.id)
+  return DocumentProcessResponse(document_id=document.id, status=DocumentStatus.PROCESSING)
+
+
 @router.get("/{document_id}", response_model=DocumentResponse)
 def get_document(document: Document = Depends(_get_document)) -> DocumentResponse:
   return document
@@ -87,4 +169,9 @@ def delete_document(
   document: Document = Depends(_get_document),
   db: Session = Depends(get_db),
 ) -> None:
+  storage = get_storage()
+  try:
+    storage.delete(document.file_url)
+  except (ValueError, FileNotFoundError, OSError):
+    logger.warning("Failed to delete file for document %s", document.id)
   document_queries.delete(db, document)
