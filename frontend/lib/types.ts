@@ -101,6 +101,9 @@ export interface CampaignContent {
   status: ContentStatus
   external_post_id?: string | null
   published_at?: string | null
+  variant?: string
+  scheduled_at?: string | null
+  engagement_metrics?: Record<string, number>
   created_at: string
   updated_at: string
 }
@@ -147,6 +150,7 @@ export interface ContentApprovalItem {
   id: string
   content?: string | null
   status: 'approved' | 'rejected'
+  scheduled_at?: string | null
 }
 
 export interface ApproveCampaignRequest {
@@ -160,4 +164,45 @@ export interface ApproveCampaignResponse {
   approved_count: number
   rejected_count: number
   resuming: boolean
+}
+
+export interface PlatformSummary {
+  platform: ContentPlatform
+  impressions: number
+  engagements: number
+  clicks: number
+  engagement_rate: number
+  ctr: number
+}
+
+export interface VariantComparison {
+  platform: ContentPlatform
+  variant_a_rate: number
+  variant_b_rate: number
+  winner: string
+}
+
+export interface ContentAnalyticsItem {
+  content_id: string
+  platform: ContentPlatform
+  variant: string
+  status: ContentStatus
+  engagement_metrics: Record<string, number>
+  scheduled_at?: string | null
+  published_at?: string | null
+  external_post_id?: string | null
+}
+
+export interface CampaignAnalyticsResponse {
+  campaign_id: string
+  totals: {
+    impressions: number
+    engagements: number
+    clicks: number
+    engagement_rate: number
+    ctr: number
+  }
+  by_platform: PlatformSummary[]
+  variants: VariantComparison[]
+  contents: ContentAnalyticsItem[]
 }

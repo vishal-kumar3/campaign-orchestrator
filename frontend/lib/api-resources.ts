@@ -4,6 +4,7 @@ import type {
   ApproveCampaignRequest,
   ApproveCampaignResponse,
   Campaign,
+  CampaignAnalyticsResponse,
   CampaignContent,
   Document,
   DocumentProcessResponse,
@@ -47,6 +48,7 @@ export const apiPaths = {
   campaignExecute: (wsId: string, id: string) => `/workspaces/${wsId}/campaigns/${id}/execute`,
   campaignStream: (wsId: string, id: string) => `/workspaces/${wsId}/campaigns/${id}/stream`,
   campaignApprove: (wsId: string, id: string) => `/workspaces/${wsId}/campaigns/${id}/approve`,
+  campaignAnalytics: (wsId: string, id: string) => `/workspaces/${wsId}/campaigns/${id}/analytics`,
   researchSnapshots: (wsId: string, campId: string) =>
     `/workspaces/${wsId}/campaigns/${campId}/research-snapshots`,
   agentRuns: (wsId: string, campId: string) =>
@@ -95,6 +97,8 @@ export function createResourceApi(client: ApiClient) {
       client.post<ExecuteCampaignResponse>(apiPaths.campaignExecute(wsId, id)),
     approveCampaign: (wsId: string, id: string, body: ApproveCampaignRequest) =>
       client.post<ApproveCampaignResponse>(apiPaths.campaignApprove(wsId, id), body),
+    getCampaignAnalytics: (wsId: string, id: string) =>
+      client.get<CampaignAnalyticsResponse>(apiPaths.campaignAnalytics(wsId, id)),
     listResearchSnapshots: (wsId: string, campId: string) =>
       client.get<PaginatedResponse<ResearchSnapshot>>(apiPaths.researchSnapshots(wsId, campId)),
     listAgentRuns: (wsId: string, campId: string) =>

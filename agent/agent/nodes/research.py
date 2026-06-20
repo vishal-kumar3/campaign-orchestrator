@@ -50,6 +50,16 @@ def research_node(state: CampaignGraphState, config: RunnableConfig) -> dict:
       callbacks["log"](run_id, "research", "Searching market context")
       market_result = client.search(query=market_query, max_results=5)
       tavily_hits.append({"query": market_query, "results": market_result})
+
+      reddit_query = f"site:reddit.com {state['objective']} sentiment discussion"
+      callbacks["log"](run_id, "research", "Searching Reddit sentiment")
+      reddit_result = client.search(query=reddit_query, max_results=5)
+      tavily_hits.append({"query": reddit_query, "results": reddit_result})
+
+      twitter_query = f"{state['objective']} twitter X sentiment reactions"
+      callbacks["log"](run_id, "research", "Searching Twitter/X sentiment")
+      twitter_result = client.search(query=twitter_query, max_results=5)
+      tavily_hits.append({"query": twitter_query, "results": twitter_result})
     else:
       callbacks["log"](
         run_id,
@@ -79,7 +89,7 @@ Research data:
 
 Write a concise research summary with:
 1. Key competitor positioning gaps
-2. Audience insights and angles
+2. Audience insights and angles (include Reddit/Twitter sentiment when present)
 3. Recommended content hooks for social posts
 
 Keep the summary under 800 words."""

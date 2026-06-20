@@ -10,13 +10,17 @@ class AgentCallbacks(TypedDict):
   log: Callable[..., None]
   create_research_snapshot: Callable[[str, dict | None], str]
   get_research_summary: Callable[[str], str]
-  create_content: Callable[[str, str | None, str], str]
+  create_content: Callable[[str, str | None, str, str], str]
   retrieve_brand_context: Callable[[str, str, int], list[dict[str, Any]]]
   transition_campaign_status: Callable[[str, str], None]
   get_approved_contents: Callable[[], list[dict[str, Any]]]
   mark_content_published: Callable[[str, str], None]
   mark_content_failed: Callable[[str, str], None]
-  publish_twitter: Callable[[str], str]
+  publish_content: Callable[[str, str, str, str | None], str]
+  enqueue_scheduled_publish: Callable[[str, str], str]
+  get_engagement_recommendations: Callable[[str, list[str]], dict[str, list[dict[str, Any]]]]
+  get_contents_by_ids: Callable[[list[str]], list[dict[str, Any]]]
+  set_content_scheduled_at: Callable[[str, str], None]
 
 
 class AgentSettings(TypedDict):
@@ -24,6 +28,7 @@ class AgentSettings(TypedDict):
   chat_model: str
   tavily_api_key: str
   retrieve_default_k: int
+  content_ab_variants: int
 
 
 class GraphConfigurable(TypedDict):

@@ -21,7 +21,6 @@ from app.schemas.document import (
   DocumentResponse,
   DocumentUploadResponse,
 )
-from app.services.rag import ingest_document
 from app.services.storage import get_storage
 
 logger = logging.getLogger(__name__)
@@ -64,15 +63,9 @@ def _get_document(
 
 
 def _run_ingestion(document_id: uuid.UUID) -> None:
-  db = SessionLocal()
-  try:
-    document = document_queries.get_by_id(db, document_id)
-    if document is None:
-      logger.error("Document %s not found for ingestion", document_id)
-      return
-    ingest_document(db, document)
-  finally:
-    db.close()
+  from app.tasks.ingestion import ingest_document_task
+
+  ingest_document_task.delay(str(document_id))
 
 
 @router.get("/", response_model=PaginatedResponse[DocumentResponse])

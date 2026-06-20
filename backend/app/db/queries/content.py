@@ -8,6 +8,10 @@ from app.db.models.content import CampaignContent
 from app.db.models.enums import ContentStatus
 
 
+def get_by_id(session: Session, content_id: uuid.UUID) -> CampaignContent | None:
+  return session.get(CampaignContent, content_id)
+
+
 def get_by_id_for_campaign(
   session: Session, content_id: uuid.UUID, campaign_id: uuid.UUID
 ) -> CampaignContent | None:
@@ -70,15 +74,17 @@ def bulk_update_approval(
   session: Session,
   campaign_id: uuid.UUID,
   *,
-  items: list[tuple[uuid.UUID, str | None, ContentStatus]],
+  items: list[tuple[uuid.UUID, str | None, ContentStatus, datetime | None]],
 ) -> None:
-  for content_id, text, status in items:
+  for content_id, text, status, scheduled_at in items:
     content = get_by_id_for_campaign(session, content_id, campaign_id)
     if content is None:
       raise ValueError(f"Content {content_id} not found for campaign")
     content.status = status
     if text is not None:
       content.content = text
+    if scheduled_at is not None:
+      content.scheduled_at = scheduled_at
   session.commit()
 
 
@@ -90,6 +96,7 @@ def create(
   title: str | None,
   content: str,
   status: ContentStatus | None,
+  variant: str = "A",
 ) -> CampaignContent:
   campaign_content = CampaignContent(
     campaign_id=campaign_id,
@@ -97,6 +104,7 @@ def create(
     title=title,
     content=content,
     status=status or ContentStatus.DRAFT,
+    variant=variant,
   )
   session.add(campaign_content)
   session.commit()
@@ -116,3 +124,44 @@ def update(session: Session, campaign_content: CampaignContent, **fields) -> Cam
 def delete(session: Session, campaign_content: CampaignContent) -> None:
   session.delete(campaign_content)
   session.commit()
+
+
+def list_all_for_campaign(session: Session, campaign_id: uuid.UUID) -> list[CampaignContent]:
+  return list(
+    session.scalars(
+      select(CampaignContent)
+      .where(CampaignContent.campaign_id == campaign_id)
+      .order_by(CampaignContent.platform.asc(), CampaignContent.variant.asc())
+    ).all()
+  )
+
+
+def get_by_ids_for_campaign(
+  session: Session, campaign_id: uuid.UUID, content_ids: list[uuid.UUID]
+) -> list[CampaignContent]:
+  return list(
+    session.scalars(
+      select(CampaignContent).where(
+        CampaignContent.campaign_id == campaign_id,
+        CampaignContent.id.in_(content_ids),
+      )
+    ).all()
+  )
+
+
+def set_scheduled_at(
+  session: Session, content: CampaignContent, scheduled_at: datetime
+) -> CampaignContent:
+  content.scheduled_at = scheduled_at
+  session.commit()
+  session.refresh(content)
+  return content
+
+
+def update_engagement_metrics(
+  session: Session, content: CampaignContent, metrics: dict
+) -> CampaignContent:
+  content.engagement_metrics = metrics
+  session.commit()
+  session.refresh(content)
+  return content

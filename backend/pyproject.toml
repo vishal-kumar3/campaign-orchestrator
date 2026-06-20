@@ -20,6 +20,8 @@ dependencies = [
     "tiktoken>=0.8.0",
     "redis[hiredis]>=5.0.0",
     "tweepy>=4.14.0",
+    "celery[redis]>=5.4",
+    "httpx>=0.28.0",
 ]
 
 [tool.uv.sources]

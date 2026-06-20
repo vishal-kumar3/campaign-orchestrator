@@ -8,6 +8,7 @@ from psycopg_pool import ConnectionPool
 from agent.nodes.content import content_node
 from agent.nodes.publisher import publisher_node
 from agent.nodes.research import research_node
+from agent.nodes.scheduler import scheduler_node
 from agent.state import CampaignGraphState
 
 logger = logging.getLogger(__name__)
@@ -55,10 +56,12 @@ def get_compiled_graph():
   builder = StateGraph(CampaignGraphState)
   builder.add_node("research", research_node)
   builder.add_node("content", content_node)
+  builder.add_node("scheduler", scheduler_node)
   builder.add_node("publisher", publisher_node)
   builder.add_edge(START, "research")
   builder.add_edge("research", "content")
-  builder.add_edge("content", "publisher")
+  builder.add_edge("content", "scheduler")
+  builder.add_edge("scheduler", "publisher")
   builder.add_edge("publisher", END)
 
   if _checkpointer is not None:

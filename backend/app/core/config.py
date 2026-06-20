@@ -31,7 +31,6 @@ class Settings(BaseSettings):
     validation_alias="GEMINI_CHAT_MODEL",
   )
 
-  google_api_key: str = ""
   tavily_api_key: str = ""
   agent_max_competitor_urls: int = 5
 
@@ -48,6 +47,21 @@ class Settings(BaseSettings):
   twitter_api_secret: str = ""
   twitter_access_token: str = ""
   twitter_access_token_secret: str = ""
+
+  app_env: str = "development"
+  celery_broker_url: str = Field(default="redis://localhost:6379/1", validation_alias="CELERY_BROKER_URL")
+  celery_result_backend: str | None = None
+  analytics_poll_delay_hours: int = 24
+  analytics_poll_delay_seconds_dev: int = 60
+  content_ab_variants: int = 2
+  default_timezone: str = "UTC"
+
+  linkedin_client_id: str = ""
+  linkedin_client_secret: str = ""
+  linkedin_access_token: str = ""
+  mailchimp_api_key: str = ""
+  mailchimp_server_prefix: str = ""
+  mailchimp_list_id: str = ""
 
   def ensure_upload_dir(self) -> Path:
     path = Path(self.upload_dir)

@@ -1,6 +1,7 @@
 import logging
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, sessionmaker
@@ -16,16 +17,23 @@ from app.db.queries import agent_run as agent_run_queries
 from app.db.queries import campaign as campaign_queries
 from app.db.queries import content as content_queries
 from app.db.queries import document as document_queries
+from app.db.queries import engagement_history as engagement_history_queries
 from app.db.queries import knowledge_base as knowledge_base_queries
 from app.db.queries import research_snapshot as research_snapshot_queries
 from app.db.queries import workflow_thread as workflow_thread_queries
 from app.services.event_bus import publish_campaign_event
-from app.services.publisher import publish_twitter_post
+from app.services.publisher import PublishPayload, publish_content as publish_content_service
 from app.services.rag import retrieve_brand_context
+from app.services.scheduling import enqueue_analytics_poll, schedule_content_publish
 
 logger = logging.getLogger(__name__)
 
-_SUPPORTED_PLATFORMS = {ContentPlatform.TWITTER, ContentPlatform.LINKEDIN}
+_SUPPORTED_PLATFORMS = {
+  ContentPlatform.TWITTER,
+  ContentPlatform.LINKEDIN,
+  ContentPlatform.EMAIL,
+  ContentPlatform.BLOG,
+}
 
 _STATUS_MAP = {
   "draft": CampaignStatus.DRAFT,
@@ -75,7 +83,7 @@ def validate_campaign_executable(session: Session, campaign: Campaign) -> None:
   if not any(p in _SUPPORTED_PLATFORMS for p in platforms):
     raise HTTPException(
       status_code=422,
-      detail="Campaign must include at least one of: twitter, linkedin",
+      detail="Campaign must include at least one of: twitter, linkedin, email, blog",
     )
 
 
@@ -230,7 +238,7 @@ def _build_callbacks(
 
   @_with_session
   def create_content(
-    db: Session, platform: str, title: str | None, content: str
+    db: Session, platform: str, title: str | None, content: str, variant: str = "A"
   ) -> str:
     piece = content_queries.create(
       db,
@@ -239,8 +247,60 @@ def _build_callbacks(
       title=title,
       content=content,
       status=None,
+      variant=variant,
     )
     return str(piece.id)
+
+  @_with_session
+  def get_contents_by_ids(db: Session, content_ids: list[str]) -> list[dict]:
+    ids = [uuid.UUID(cid) for cid in content_ids]
+    items = content_queries.get_by_ids_for_campaign(db, campaign_id, ids)
+    return [
+      {
+        "id": str(item.id),
+        "platform": item.platform.value,
+        "variant": item.variant,
+        "title": item.title,
+        "content": item.content,
+        "scheduled_at": item.scheduled_at.isoformat() if item.scheduled_at else None,
+      }
+      for item in items
+    ]
+
+  @_with_session
+  def set_content_scheduled_at(db: Session, content_id: str, scheduled_at: str) -> None:
+    content = content_queries.get_by_id_for_campaign(
+      db, uuid.UUID(content_id), campaign_id
+    )
+    if content is None:
+      raise ValueError(f"Content {content_id} not found")
+    when = datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
+    content_queries.set_scheduled_at(db, content, when)
+
+  @_with_session
+  def get_engagement_recommendations(
+    db: Session, workspace_id: str, platforms: list[str]
+  ) -> dict[str, list[dict]]:
+    ws_id = uuid.UUID(workspace_id)
+    engagement_history_queries.seed_for_workspace(db, ws_id)
+    result: dict[str, list[dict]] = {}
+    for platform in platforms:
+      try:
+        platform_enum = ContentPlatform(platform)
+      except ValueError:
+        continue
+      slots = engagement_history_queries.aggregate_best_slots(db, ws_id, platform_enum)
+      result[platform] = [
+        {
+          "post_day": slot.post_day,
+          "post_hour": slot.post_hour,
+          "score": slot.score,
+          "impressions": slot.impressions,
+          "engagements": slot.engagements,
+        }
+        for slot in slots
+      ]
+    return result
 
   @_with_session
   def retrieve_context(db: Session, kb_id: str, query: str, k: int) -> list[dict]:
@@ -285,18 +345,11 @@ def _build_callbacks(
         "id": str(item.id),
         "platform": item.platform.value,
         "content": item.content,
+        "title": item.title,
+        "scheduled_at": item.scheduled_at.isoformat() if item.scheduled_at else None,
       }
       for item in items
     ]
-
-  @_with_session
-  def mark_content_published(db: Session, content_id: str, external_post_id: str) -> None:
-    content = content_queries.get_by_id_for_campaign(
-      db, uuid.UUID(content_id), campaign_id
-    )
-    if content is None:
-      raise ValueError(f"Content {content_id} not found")
-    content_queries.mark_published(db, content, external_post_id=external_post_id)
 
   @_with_session
   def mark_content_failed(db: Session, content_id: str, _error: str) -> None:
@@ -307,8 +360,32 @@ def _build_callbacks(
       raise ValueError(f"Content {content_id} not found")
     content_queries.mark_failed(db, content)
 
-  def publish_twitter(text: str) -> str:
-    return publish_twitter_post(text)
+  @_with_session
+  def mark_content_published(db: Session, content_id: str, external_post_id: str) -> None:
+    content = content_queries.get_by_id_for_campaign(
+      db, uuid.UUID(content_id), campaign_id
+    )
+    if content is None:
+      raise ValueError(f"Content {content_id} not found")
+    content_queries.mark_published(db, content, external_post_id=external_post_id)
+    enqueue_analytics_poll(content_id)
+
+  def publish_content(
+    platform: str, content_id: str, text: str, title: str | None
+  ) -> str:
+    return publish_content_service(
+      PublishPayload(
+        content_id=content_id,
+        platform=platform,
+        text=text,
+        title=title,
+      )
+    )
+
+  @_with_session
+  def enqueue_scheduled_publish(db: Session, content_id: str, scheduled_at: str) -> str:
+    when = datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
+    return schedule_content_publish(db, uuid.UUID(content_id), when)
 
   return AgentCallbacks(
     create_agent_run=lambda name, data: create_agent_run(name, data),
@@ -321,8 +398,8 @@ def _build_callbacks(
       summary, raw
     ),
     get_research_summary=lambda snapshot_id: get_research_summary(snapshot_id),
-    create_content=lambda platform, title, content: create_content(
-      platform, title, content
+    create_content=lambda platform, title, content, variant="A": create_content(
+      platform, title, content, variant
     ),
     retrieve_brand_context=lambda kb_id, query, k: retrieve_context(
       kb_id, query, k
@@ -333,7 +410,15 @@ def _build_callbacks(
     get_approved_contents=lambda: get_approved_contents(),
     mark_content_published=lambda cid, post_id: mark_content_published(cid, post_id),
     mark_content_failed=lambda cid, err: mark_content_failed(cid, err),
-    publish_twitter=publish_twitter,
+    publish_content=lambda platform, cid, text, title=None: publish_content(
+      platform, cid, text, title
+    ),
+    enqueue_scheduled_publish=lambda cid, when: enqueue_scheduled_publish(cid, when),
+    get_engagement_recommendations=lambda ws_id, platforms: get_engagement_recommendations(
+      ws_id, platforms
+    ),
+    get_contents_by_ids=lambda ids: get_contents_by_ids(ids),
+    set_content_scheduled_at=lambda cid, when: set_content_scheduled_at(cid, when),
   )
 
 
@@ -365,6 +450,7 @@ def _build_graph_config(
       chat_model=settings.chat_model,
       tavily_api_key=settings.tavily_api_key,
       retrieve_default_k=settings.retrieve_default_k,
+      content_ab_variants=settings.content_ab_variants,
     ),
   }
 

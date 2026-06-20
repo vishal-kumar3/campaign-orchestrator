@@ -31,5 +31,8 @@ class ContentResponse(BaseModel):
   status: ContentStatus
   external_post_id: str | None = None
   published_at: datetime | None = None
+  variant: str = "A"
+  scheduled_at: datetime | None = None
+  engagement_metrics: dict = {}
   created_at: datetime
   updated_at: datetime

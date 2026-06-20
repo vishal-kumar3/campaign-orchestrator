@@ -21,6 +21,7 @@ import type {
 } from '@/lib/types'
 import { AppShell } from '@/components/app-shell'
 import { AgentLogPanel } from '@/components/agent-log-panel'
+import { CampaignAnalyticsPanel } from '@/components/campaign-analytics-panel'
 import { EmptyState, PageHeader } from '@/components/page-header'
 import {
   CampaignStatusBadge,
@@ -78,6 +79,18 @@ const STREAM_ACTIVE_STATUSES = new Set<CampaignStatus>([
   'approval_pending',
   'completed',
 ])
+
+function toDatetimeLocal(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function fromDatetimeLocal(value: string): string | null {
+  if (!value) return null
+  return new Date(value).toISOString()
+}
 
 function ContentCreateDialog({
   workspaceId,
@@ -230,8 +243,12 @@ function ContentCard({
   campaignId: string
   item: CampaignContent
   approvalMode?: boolean
-  approvalState?: { content: string; status: 'approved' | 'rejected' }
-  onApprovalChange?: (update: { content?: string; status?: 'approved' | 'rejected' }) => void
+  approvalState?: { content: string; status: 'approved' | 'rejected'; scheduled_at?: string | null }
+  onApprovalChange?: (update: {
+    content?: string
+    status?: 'approved' | 'rejected'
+    scheduled_at?: string | null
+  }) => void
 }) {
   const client = useApiClient()
   const api = createResourceApi(client)
@@ -299,6 +316,11 @@ function ContentCard({
             <CardTitle className="text-base">{item.title ?? 'Untitled'}</CardTitle>
             <div className="flex flex-wrap gap-2">
               <PlatformBadge platform={item.platform} />
+              {item.variant && (
+                <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium">
+                  Variant {item.variant}
+                </span>
+              )}
               <ContentStatusBadge
                 status={(approvalState?.status ?? item.status) as CampaignContent['status']}
               />
@@ -336,6 +358,19 @@ function ContentCard({
                 value={approvalState?.content ?? item.content}
                 onChange={(e) => onApprovalChange?.({ content: e.target.value })}
               />
+              <div className="space-y-2">
+                <Label htmlFor={`schedule-${item.id}`} className="text-sm">
+                  Scheduled publish time
+                </Label>
+                <Input
+                  id={`schedule-${item.id}`}
+                  type="datetime-local"
+                  value={toDatetimeLocal(approvalState?.scheduled_at ?? item.scheduled_at)}
+                  onChange={(e) =>
+                    onApprovalChange?.({ scheduled_at: fromDatetimeLocal(e.target.value) })
+                  }
+                />
+              </div>
               <div className="flex gap-2">
                 <Button
                   type="button"
@@ -418,20 +453,40 @@ function ApprovalPanel({
   const api = createResourceApi(client)
   const [rejectAllToDraft, setRejectAllToDraft] = useState(false)
   const [approvals, setApprovals] = useState<
-    Record<string, { content: string; status: 'approved' | 'rejected' }>
+    Record<string, { content: string; status: 'approved' | 'rejected'; scheduled_at?: string | null }>
   >(() =>
     Object.fromEntries(
-      items.map((item) => [item.id, { content: item.content, status: 'approved' as const }]),
+      items.map((item) => [
+        item.id,
+        {
+          content: item.content,
+          status: 'approved' as const,
+          scheduled_at: item.scheduled_at ?? null,
+        },
+      ]),
     ),
   )
 
   useEffect(() => {
     setApprovals(
       Object.fromEntries(
-        items.map((item) => [item.id, { content: item.content, status: 'approved' as const }]),
+        items.map((item) => [
+          item.id,
+          {
+            content: item.content,
+            status: 'approved' as const,
+            scheduled_at: item.scheduled_at ?? null,
+          },
+        ]),
       ),
     )
   }, [items])
+
+  const groupedByPlatform = items.reduce<Record<string, CampaignContent[]>>((acc, item) => {
+    acc[item.platform] = acc[item.platform] ?? []
+    acc[item.platform].push(item)
+    return acc
+  }, {})
 
   const approveMutation = useMutation({
     mutationFn: (payload: ContentApprovalItem[]) =>
@@ -457,6 +512,7 @@ function ApprovalPanel({
       id: item.id,
       content: approvals[item.id]?.content ?? item.content,
       status: approvals[item.id]?.status ?? 'approved',
+      scheduled_at: approvals[item.id]?.scheduled_at ?? item.scheduled_at ?? null,
     }))
     approveMutation.mutate(payload)
   }
@@ -464,25 +520,34 @@ function ApprovalPanel({
   return (
     <div className="space-y-4">
       <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
-        Review generated content before publishing. Only approved Twitter content will be
-        published in this phase; LinkedIn is saved for Phase 4.
+        Review generated content before publishing. Twitter, LinkedIn, and Email publish on
+        approve (or at the scheduled time). Blog content is export-only.
       </div>
-      <div className="grid gap-4">
-        {items.map((item) => (
-          <ContentCard
-            key={item.id}
-            workspaceId={workspaceId}
-            campaignId={campaignId}
-            item={item}
-            approvalMode
-            approvalState={approvals[item.id]}
-            onApprovalChange={(update) =>
-              setApprovals((prev) => ({
-                ...prev,
-                [item.id]: { ...prev[item.id], ...update },
-              }))
-            }
-          />
+      <div className="space-y-6">
+        {Object.entries(groupedByPlatform).map(([platform, platformItems]) => (
+          <div key={platform} className="space-y-3">
+            <h3 className="text-sm font-semibold capitalize">{platform}</h3>
+            <div className="grid gap-4 lg:grid-cols-2">
+              {platformItems
+                .sort((a, b) => (a.variant ?? 'A').localeCompare(b.variant ?? 'A'))
+                .map((item) => (
+                  <ContentCard
+                    key={item.id}
+                    workspaceId={workspaceId}
+                    campaignId={campaignId}
+                    item={item}
+                    approvalMode
+                    approvalState={approvals[item.id]}
+                    onApprovalChange={(update) =>
+                      setApprovals((prev) => ({
+                        ...prev,
+                        [item.id]: { ...prev[item.id], ...update },
+                      }))
+                    }
+                  />
+                ))}
+            </div>
+          </div>
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-4">
@@ -710,6 +775,9 @@ export function CampaignDetailPage({
     !!campaign.knowledge_base_id &&
     !executeMutation.isPending
   const isRunning = POLLING_STATUSES.has(campaign.status)
+  const hasPublishedContent =
+    (contentsQuery.data?.items ?? []).some((c) => c.status === 'published') ||
+    campaign.status === 'completed'
 
   return (
     <AppShell workspaceId={workspaceId} workspaceName={workspaceQuery.data?.name}>
@@ -757,6 +825,7 @@ export function CampaignDetailPage({
             <TabsTrigger value="research">Research</TabsTrigger>
             <TabsTrigger value="content">Content</TabsTrigger>
             <TabsTrigger value="activity">Activity</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="mt-4">
@@ -844,6 +913,14 @@ export function CampaignDetailPage({
               campaignStatus={campaign.status}
               onStatusEvent={handleStatusEvent}
               onConnectionChange={setSseConnected}
+            />
+          </TabsContent>
+
+          <TabsContent value="analytics" className="mt-4">
+            <CampaignAnalyticsPanel
+              workspaceId={workspaceId}
+              campaignId={campaignId}
+              enabled={hasPublishedContent}
             />
           </TabsContent>
         </Tabs>

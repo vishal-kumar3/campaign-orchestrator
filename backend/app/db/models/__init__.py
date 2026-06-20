@@ -2,6 +2,8 @@ from app.db.models.agent_log import AgentLog
 from app.db.models.agent_run import AgentRun
 from app.db.models.campaign import Campaign
 from app.db.models.content import CampaignContent
+from app.db.models.engagement_history import EngagementHistory
+from app.db.models.scheduled_job import ScheduledJob
 from app.db.models.document import Document, DocumentChunk
 from app.db.models.enums import (
   AgentStatus,
@@ -34,6 +36,8 @@ __all__ = [
   "Campaign",
   "ResearchSnapshot",
   "CampaignContent",
+  "ScheduledJob",
+  "EngagementHistory",
   "AgentRun",
   "AgentLog",
   "WorkflowThread",

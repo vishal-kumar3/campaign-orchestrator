@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC, datetime
 
 from langchain_core.runnables import RunnableConfig
 
@@ -7,11 +8,15 @@ from agent.state import CampaignGraphState
 
 logger = logging.getLogger(__name__)
 
+_PUBLISHABLE_PLATFORMS = {"twitter", "linkedin", "email"}
+
 
 def publisher_node(state: CampaignGraphState, config: RunnableConfig) -> dict:
   callbacks = get_callbacks(config)
 
-  run_id = callbacks["create_agent_run"]("publisher", {"content_ids": state.get("content_ids", [])})
+  run_id = callbacks["create_agent_run"](
+    "publisher", {"content_ids": state.get("content_ids", [])}
+  )
 
   try:
     callbacks["log"](run_id, "publisher", "Starting publisher")
@@ -28,21 +33,40 @@ def publisher_node(state: CampaignGraphState, config: RunnableConfig) -> dict:
 
     for item in approved:
       platform = item["platform"]
-      if platform != "twitter":
+      content_id = item["id"]
+
+      if platform == "blog":
+        callbacks["log"](run_id, "publisher", "Blog content is export-only; skipping publish")
+        continue
+
+      if platform not in _PUBLISHABLE_PLATFORMS:
+        callbacks["log"](run_id, "publisher", f"Skipping unsupported platform: {platform}")
+        continue
+
+      scheduled_at_raw = item.get("scheduled_at")
+      scheduled_at = None
+      if scheduled_at_raw:
+        scheduled_at = datetime.fromisoformat(scheduled_at_raw.replace("Z", "+00:00"))
+
+      if scheduled_at and scheduled_at > datetime.now(UTC):
         callbacks["log"](
           run_id,
           "publisher",
-          f"Skipping {platform} publish (deferred to Phase 4)",
+          f"Scheduling {platform} publish for {scheduled_at.isoformat()}",
         )
+        callbacks["enqueue_scheduled_publish"](content_id, scheduled_at.isoformat())
         continue
 
-      content_id = item["id"]
-      text = item["content"]
       try:
-        callbacks["log"](run_id, "publisher", f"Publishing to Twitter ({len(text)} chars)")
-        post_id = callbacks["publish_twitter"](text)
+        callbacks["log"](run_id, "publisher", f"Publishing to {platform}")
+        post_id = callbacks["publish_content"](
+          platform,
+          content_id,
+          item["content"],
+          item.get("title"),
+        )
         callbacks["mark_content_published"](content_id, post_id)
-        callbacks["log"](run_id, "publisher", f"Published to Twitter: {post_id}")
+        callbacks["log"](run_id, "publisher", f"Published to {platform}: {post_id}")
       except Exception as exc:
         logger.exception("Failed to publish content %s", content_id)
         callbacks["mark_content_failed"](content_id, str(exc))

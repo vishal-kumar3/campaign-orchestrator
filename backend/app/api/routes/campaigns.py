@@ -19,6 +19,7 @@ from app.db.queries import knowledge_base as knowledge_base_queries
 from app.db.queries import research_snapshot as research_snapshot_queries
 from app.db.queries import workflow_thread as workflow_thread_queries
 from app.db.session import SessionLocal
+from app.schemas.analytics import CampaignAnalyticsResponse
 from app.schemas.agent import AgentLogResponse, AgentRunResponse
 from app.schemas.approve import ApproveCampaignRequest, ApproveCampaignResponse
 from app.schemas.campaign import CampaignCreate, CampaignResponse, CampaignUpdate
@@ -33,6 +34,7 @@ from app.services.campaign_executor import (
   validate_campaign_approvable,
 )
 from app.services.campaign_stream import campaign_event_stream
+from app.services.analytics import build_campaign_analytics
 
 logger = logging.getLogger(__name__)
 
@@ -236,6 +238,14 @@ async def stream_campaign_events(
   )
 
 
+@router.get("/{campaign_id}/analytics", response_model=CampaignAnalyticsResponse)
+def get_campaign_analytics(
+  campaign: Campaign = Depends(_get_campaign),
+  db: Session = Depends(get_db),
+) -> CampaignAnalyticsResponse:
+  return build_campaign_analytics(db, campaign.id)
+
+
 @router.post(
   "/{campaign_id}/approve",
   response_model=ApproveCampaignResponse,
@@ -267,6 +277,7 @@ def approve_campaign(
           item.id,
           item.content,
           ContentStatus.APPROVED if item.status == "approved" else ContentStatus.REJECTED,
+          item.scheduled_at,
         )
         for item in body.contents
       ],

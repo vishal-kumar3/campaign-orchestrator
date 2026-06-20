@@ -15,12 +15,24 @@ Return only the post text, no quotes or labels.""",
   "linkedin": """Write a LinkedIn post (150-300 words).
 Tone: professional, insightful, thought-leadership.
 Include a short hook opening line. Return only the post text.""",
+  "email": """Write a marketing email as HTML (use simple tags: h1, p, ul, strong).
+First line must be "Subject: <subject line>" on its own line, then a blank line, then HTML body.
+Tone: professional newsletter.""",
+  "blog": """Write a blog post in markdown (800-1200 words).
+Start with a single # title line, then the body with ## subheadings.
+Tone: authoritative, educational, on-brand.""",
+}
+
+_VARIANT_SUFFIX = {
+  "A": "",
+  "B": "\n\nCreate an alternate angle: more provocative hook and data-driven framing.",
 }
 
 
 def content_node(state: CampaignGraphState, config: RunnableConfig) -> dict:
   callbacks = get_callbacks(config)
   settings = get_settings(config)
+  ab_variants = settings.get("content_ab_variants", 2)
 
   snapshot_id = state.get("research_snapshot_id")
   if not snapshot_id:
@@ -57,13 +69,16 @@ def content_node(state: CampaignGraphState, config: RunnableConfig) -> dict:
       temperature=0.7,
     )
 
+    variant_labels = [chr(ord("A") + i) for i in range(max(1, ab_variants))]
     content_ids: list[str] = []
+
     for platform in state["platforms"]:
       if platform not in _PLATFORM_PROMPTS:
         continue
 
-      callbacks["log"](run_id, "content", f"Generating {platform} content")
-      prompt = f"""{_PLATFORM_PROMPTS[platform]}
+      for variant in variant_labels:
+        callbacks["log"](run_id, "content", f"Generating {platform} variant {variant}")
+        prompt = f"""{_PLATFORM_PROMPTS[platform]}{_VARIANT_SUFFIX.get(variant, "")}
 
 Campaign objective: {state['objective']}
 Target audience: {state.get('target_audience') or 'Not specified'}
@@ -74,11 +89,24 @@ Research summary:
 Brand voice guidelines (from knowledge base):
 {brand_context or 'No brand context available.'}
 """
-      response = llm.invoke(prompt)
-      text = response.content if isinstance(response.content, str) else str(response.content)
-      content_id = callbacks["create_content"](platform, None, text.strip())
-      content_ids.append(content_id)
-      callbacks["log"](run_id, "content", f"Created {platform} draft")
+        response = llm.invoke(prompt)
+        text = response.content if isinstance(response.content, str) else str(response.content)
+        text = text.strip()
+
+        title = None
+        body = text
+        if platform == "email" and text.lower().startswith("subject:"):
+          lines = text.split("\n", 2)
+          title = lines[0].replace("Subject:", "", 1).strip()
+          body = lines[2].strip() if len(lines) > 2 else lines[-1].strip()
+        elif platform == "blog" and text.startswith("#"):
+          lines = text.split("\n", 1)
+          title = lines[0].lstrip("# ").strip()
+          body = lines[1].strip() if len(lines) > 1 else text
+
+        content_id = callbacks["create_content"](platform, title, body, variant)
+        content_ids.append(content_id)
+        callbacks["log"](run_id, "content", f"Created {platform} variant {variant} draft")
 
     if not content_ids:
       raise ValueError("No supported platforms produced content")
