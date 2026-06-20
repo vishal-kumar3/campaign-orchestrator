@@ -42,6 +42,9 @@ class CampaignContent(Base):
     server_default=text("'draft'"),
   )
 
+  external_post_id: Mapped[str | None] = mapped_column(Text)
+  published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
   created_at: Mapped[datetime] = mapped_column(
     DateTime(timezone=True), server_default=func.now()
   )

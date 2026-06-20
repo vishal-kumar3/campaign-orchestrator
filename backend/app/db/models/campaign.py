@@ -34,6 +34,12 @@ class Campaign(Base):
       )
     )
   )
+  knowledge_base_id: Mapped[uuid.UUID | None] = mapped_column(
+    UUID(as_uuid=True),
+    ForeignKey("knowledge_bases.id", ondelete="SET NULL"),
+    nullable=True,
+  )
+  competitor_urls: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
 
   status: Mapped[CampaignStatus] = mapped_column(
     Enum(
@@ -54,8 +60,12 @@ class Campaign(Base):
 
   # Relationships
   workspace: Mapped["Workspace"] = relationship(back_populates="campaigns")
+  knowledge_base: Mapped["KnowledgeBase | None"] = relationship(
+    foreign_keys=[knowledge_base_id],
+  )
   knowledge_bases: Mapped[list["KnowledgeBase"]] = relationship(
-    back_populates="campaign"
+    back_populates="campaign",
+    foreign_keys="KnowledgeBase.campaign_id",
   )
   research_snapshots: Mapped[list["ResearchSnapshot"]] = relationship(
     back_populates="campaign", cascade="all, delete-orphan"

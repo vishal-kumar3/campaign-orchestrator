@@ -75,6 +75,12 @@ function CampaignCreateDialog({ workspaceId }: { workspaceId: string }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
 
+  const knowledgeBasesQuery = useQuery({
+    queryKey: queryKeys.knowledgeBases(workspaceId),
+    queryFn: () => api.listKnowledgeBases(workspaceId),
+    enabled: open,
+  })
+
   const form = useForm<CampaignCreateInput>({
     resolver: zodResolver(campaignCreateSchema),
     defaultValues: {
@@ -83,6 +89,8 @@ function CampaignCreateDialog({ workspaceId }: { workspaceId: string }) {
       target_audience: '',
       region: '',
       platforms: [],
+      knowledge_base_id: '',
+      competitor_urls: [],
     },
   })
 
@@ -94,6 +102,8 @@ function CampaignCreateDialog({ workspaceId }: { workspaceId: string }) {
         target_audience: values.target_audience || null,
         region: values.region || null,
         platforms: values.platforms?.length ? values.platforms : null,
+        knowledge_base_id: values.knowledge_base_id || null,
+        competitor_urls: values.competitor_urls?.length ? values.competitor_urls : null,
       }),
     onMutate: async (values) => {
       const key = queryKeys.campaigns(workspaceId)
@@ -107,6 +117,8 @@ function CampaignCreateDialog({ workspaceId }: { workspaceId: string }) {
         target_audience: values.target_audience || null,
         region: values.region || null,
         platforms: values.platforms ?? null,
+        knowledge_base_id: values.knowledge_base_id || null,
+        competitor_urls: values.competitor_urls ?? null,
         status: 'draft',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -135,6 +147,7 @@ function CampaignCreateDialog({ workspaceId }: { workspaceId: string }) {
   })
 
   const selectedPlatforms = form.watch('platforms') ?? []
+  const competitorUrls = form.watch('competitor_urls') ?? []
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -195,6 +208,64 @@ function CampaignCreateDialog({ workspaceId }: { workspaceId: string }) {
                 )
               })}
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Brand knowledge base</Label>
+            <Select
+              value={form.watch('knowledge_base_id') || 'none'}
+              onValueChange={(v) =>
+                form.setValue('knowledge_base_id', v === 'none' ? '' : v)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select knowledge base" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {(knowledgeBasesQuery.data?.items ?? []).map((kb) => (
+                  <SelectItem key={kb.id} value={kb.id}>
+                    {kb.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FieldError message={form.formState.errors.knowledge_base_id?.message} />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Competitor URLs</Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={competitorUrls.length >= 5}
+                onClick={() => form.setValue('competitor_urls', [...competitorUrls, ''])}
+              >
+                Add URL
+              </Button>
+            </div>
+            {competitorUrls.map((_, index) => (
+              <div key={index} className="flex gap-2">
+                <Input
+                  placeholder="https://competitor.com"
+                  {...form.register(`competitor_urls.${index}`)}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() =>
+                    form.setValue(
+                      'competitor_urls',
+                      competitorUrls.filter((__, i) => i !== index),
+                    )
+                  }
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+            ))}
+            <FieldError message={form.formState.errors.competitor_urls?.message} />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

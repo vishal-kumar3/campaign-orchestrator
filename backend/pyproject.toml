@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "agent",
     "alembic>=1.18.4",
     "clerk-backend-api>=5.0.7",
     "fastapi[standard]>=0.136.3",
@@ -17,4 +18,9 @@ dependencies = [
     "python-multipart>=0.0.9",
     "sqlalchemy>=2.0.50",
     "tiktoken>=0.8.0",
+    "redis[hiredis]>=5.0.0",
+    "tweepy>=4.14.0",
 ]
+
+[tool.uv.sources]
+agent = { path = "../agent", editable = true }

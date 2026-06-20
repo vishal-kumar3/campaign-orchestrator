@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -29,6 +30,56 @@ def list_for_campaign(
     ).all()
   )
   return items, total
+
+
+def get_approved_for_campaign(
+  session: Session, campaign_id: uuid.UUID
+) -> list[CampaignContent]:
+  return list(
+    session.scalars(
+      select(CampaignContent).where(
+        CampaignContent.campaign_id == campaign_id,
+        CampaignContent.status == ContentStatus.APPROVED,
+      )
+    ).all()
+  )
+
+
+def mark_published(
+  session: Session,
+  content: CampaignContent,
+  *,
+  external_post_id: str,
+) -> CampaignContent:
+  content.status = ContentStatus.PUBLISHED
+  content.external_post_id = external_post_id
+  content.published_at = datetime.now(UTC)
+  session.commit()
+  session.refresh(content)
+  return content
+
+
+def mark_failed(session: Session, content: CampaignContent) -> CampaignContent:
+  content.status = ContentStatus.FAILED
+  session.commit()
+  session.refresh(content)
+  return content
+
+
+def bulk_update_approval(
+  session: Session,
+  campaign_id: uuid.UUID,
+  *,
+  items: list[tuple[uuid.UUID, str | None, ContentStatus]],
+) -> None:
+  for content_id, text, status in items:
+    content = get_by_id_for_campaign(session, content_id, campaign_id)
+    if content is None:
+      raise ValueError(f"Content {content_id} not found for campaign")
+    content.status = status
+    if text is not None:
+      content.content = text
+  session.commit()
 
 
 def create(

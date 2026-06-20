@@ -40,6 +40,8 @@ def create(
   target_audience: str | None,
   region: str | None,
   platforms: list | None,
+  knowledge_base_id: uuid.UUID | None = None,
+  competitor_urls: list[str] | None = None,
 ) -> Campaign:
   campaign = Campaign(
     workspace_id=workspace_id,
@@ -48,6 +50,8 @@ def create(
     target_audience=target_audience,
     region=region,
     platforms=platforms,
+    knowledge_base_id=knowledge_base_id,
+    competitor_urls=competitor_urls,
     status=CampaignStatus.DRAFT,
   )
   session.add(campaign)
@@ -58,8 +62,24 @@ def create(
 
 def update(session: Session, campaign: Campaign, **fields) -> Campaign:
   for key, value in fields.items():
-    if value is not None:
-      setattr(campaign, key, value)
+    setattr(campaign, key, value)
+  session.commit()
+  session.refresh(campaign)
+  return campaign
+
+
+def transition_status(
+  session: Session,
+  campaign: Campaign,
+  *,
+  to: CampaignStatus,
+  allowed_from: set[CampaignStatus],
+) -> Campaign:
+  if campaign.status not in allowed_from:
+    raise ValueError(
+      f"Cannot transition from {campaign.status.value} to {to.value}"
+    )
+  campaign.status = to
   session.commit()
   session.refresh(campaign)
   return campaign

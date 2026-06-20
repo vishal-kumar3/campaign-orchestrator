@@ -8,7 +8,7 @@ export type CampaignStatus =
 
 export type ContentPlatform = 'twitter' | 'linkedin' | 'email' | 'blog'
 
-export type ContentStatus = 'draft' | 'approved' | 'rejected'
+export type ContentStatus = 'draft' | 'approved' | 'rejected' | 'published' | 'failed'
 
 export type KnowledgeScope = 'workspace' | 'campaign'
 
@@ -36,6 +36,8 @@ export interface Campaign {
   target_audience: string | null
   region: string | null
   platforms: ContentPlatform[] | null
+  knowledge_base_id: string | null
+  competitor_urls: string[] | null
   status: CampaignStatus
   created_at: string
   updated_at: string
@@ -97,6 +99,65 @@ export interface CampaignContent {
   title: string | null
   content: string
   status: ContentStatus
+  external_post_id?: string | null
+  published_at?: string | null
   created_at: string
   updated_at: string
+}
+
+export type AgentStatus = 'running' | 'completed' | 'failed'
+
+export interface ResearchSnapshot {
+  id: string
+  campaign_id: string
+  summary: string | null
+  raw_data: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface AgentRun {
+  id: string
+  campaign_id: string
+  agent_name: string
+  status: AgentStatus
+  input: Record<string, unknown> | null
+  output: Record<string, unknown> | null
+  started_at: string
+  completed_at: string | null
+}
+
+export interface AgentLog {
+  id: string
+  run_id: string
+  node_name: string
+  level: 'info' | 'warning' | 'error'
+  message: string
+  metadata: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface ExecuteCampaignResponse {
+  campaign_id: string
+  status: CampaignStatus
+  thread_id: string
+  message: string
+}
+
+export interface ContentApprovalItem {
+  id: string
+  content?: string | null
+  status: 'approved' | 'rejected'
+}
+
+export interface ApproveCampaignRequest {
+  contents: ContentApprovalItem[]
+  reject_all_to_draft?: boolean
+}
+
+export interface ApproveCampaignResponse {
+  campaign_id: string
+  status: CampaignStatus
+  approved_count: number
+  rejected_count: number
+  resuming: boolean
 }

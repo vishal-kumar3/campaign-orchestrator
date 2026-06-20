@@ -7,4 +7,4 @@ RUN uv sync --frozen --no-dev
 
 COPY . .
 
-CMD ["uv", "run", "python", "main.py"]
+CMD ["uv", "run", "python", "-m", "agent.main"]

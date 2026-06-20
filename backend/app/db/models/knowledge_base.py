@@ -63,7 +63,10 @@ class KnowledgeBase(Base):
 
   # Relationships
   workspace: Mapped["Workspace"] = relationship(back_populates="knowledge_bases")
-  campaign: Mapped["Campaign | None"] = relationship(back_populates="knowledge_bases")
+  campaign: Mapped["Campaign | None"] = relationship(
+    back_populates="knowledge_bases",
+    foreign_keys=[campaign_id],
+  )
   documents: Mapped[list["Document"]] = relationship(
     back_populates="knowledge_base", cascade="all, delete-orphan"
   )

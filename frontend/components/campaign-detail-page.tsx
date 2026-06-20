@@ -2,19 +2,31 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2, MoreHorizontal, Plus, Trash2 } from 'lucide-react'
+import { Loader2, MoreHorizontal, Play, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { useApiClient } from '@/hooks/use-api-client'
 import { createResourceApi, queryKeys } from '@/lib/api-resources'
 import { contentCreateSchema, type ContentCreateInput } from '@/lib/schemas'
-import type { CampaignContent, PaginatedResponse } from '@/lib/types'
+import type {
+  Campaign,
+  CampaignContent,
+  CampaignStatus,
+  ContentApprovalItem,
+  KnowledgeBase,
+  PaginatedResponse,
+} from '@/lib/types'
 import { AppShell } from '@/components/app-shell'
+import { AgentLogPanel } from '@/components/agent-log-panel'
 import { EmptyState, PageHeader } from '@/components/page-header'
-import { ContentStatusBadge, PlatformBadge } from '@/components/status-badge'
+import {
+  CampaignStatusBadge,
+  ContentStatusBadge,
+  PlatformBadge,
+} from '@/components/status-badge'
 import { FieldError } from '@/components/field-error'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -42,6 +54,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import {
   AlertDialog,
@@ -53,10 +66,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+
 import { isApiError } from '@/lib/api-client'
 
 const PLATFORMS = ['twitter', 'linkedin', 'email', 'blog'] as const
-const STATUSES = ['draft', 'approved', 'rejected'] as const
+const STATUSES = ['draft', 'approved', 'rejected', 'published', 'failed'] as const
+const POLLING_STATUSES = new Set<CampaignStatus>(['researching', 'generating'])
+const STREAM_ACTIVE_STATUSES = new Set<CampaignStatus>([
+  'researching',
+  'generating',
+  'approval_pending',
+  'completed',
+])
 
 function ContentCreateDialog({
   workspaceId,
@@ -201,10 +222,16 @@ function ContentCard({
   workspaceId,
   campaignId,
   item,
+  approvalMode = false,
+  approvalState,
+  onApprovalChange,
 }: {
   workspaceId: string
   campaignId: string
   item: CampaignContent
+  approvalMode?: boolean
+  approvalState?: { content: string; status: 'approved' | 'rejected' }
+  onApprovalChange?: (update: { content?: string; status?: 'approved' | 'rejected' }) => void
 }) {
   const client = useApiClient()
   const api = createResourceApi(client)
@@ -220,8 +247,7 @@ function ContentCard({
       await queryClient.cancelQueries({ queryKey: key })
       const previous = queryClient.getQueryData<PaginatedResponse<CampaignContent>>(key)
       queryClient.setQueryData<PaginatedResponse<CampaignContent>>(key, (old) => ({
-        items:
-          old?.items.map((c) => (c.id === item.id ? { ...c, status } : c)) ?? [],
+        items: old?.items.map((c) => (c.id === item.id ? { ...c, status } : c)) ?? [],
         total: old?.total ?? 0,
       }))
       return { previous }
@@ -273,9 +299,12 @@ function ContentCard({
             <CardTitle className="text-base">{item.title ?? 'Untitled'}</CardTitle>
             <div className="flex flex-wrap gap-2">
               <PlatformBadge platform={item.platform} />
-              <ContentStatusBadge status={item.status} />
+              <ContentStatusBadge
+                status={(approvalState?.status ?? item.status) as CampaignContent['status']}
+              />
             </div>
           </div>
+          {!approvalMode && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" disabled={isOptimistic}>
@@ -297,11 +326,59 @@ function ContentCard({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          )}
         </CardHeader>
-        <CardContent>
-          <CardDescription className="whitespace-pre-wrap text-sm text-foreground">
-            {item.content}
-          </CardDescription>
+        <CardContent className="space-y-3">
+          {approvalMode ? (
+            <>
+              <Textarea
+                rows={6}
+                value={approvalState?.content ?? item.content}
+                onChange={(e) => onApprovalChange?.({ content: e.target.value })}
+              />
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={approvalState?.status === 'approved' ? 'default' : 'outline'}
+                  onClick={() => onApprovalChange?.({ status: 'approved' })}
+                >
+                  Approve
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={approvalState?.status === 'rejected' ? 'destructive' : 'outline'}
+                  onClick={() => onApprovalChange?.({ status: 'rejected' })}
+                >
+                  Reject
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <CardDescription className="whitespace-pre-wrap text-sm text-foreground">
+                {item.content}
+              </CardDescription>
+              {item.external_post_id && (
+                <p className="text-xs text-muted-foreground">
+                  Post ID:{' '}
+                  {item.external_post_id.startsWith('dry-run-') ? (
+                    item.external_post_id
+                  ) : (
+                    <a
+                      href={`https://twitter.com/i/web/status/${item.external_post_id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary underline-offset-4 hover:underline"
+                    >
+                      {item.external_post_id}
+                    </a>
+                  )}
+                </p>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -326,6 +403,190 @@ function ContentCard({
   )
 }
 
+function ApprovalPanel({
+  workspaceId,
+  campaignId,
+  items,
+  onSubmitted,
+}: {
+  workspaceId: string
+  campaignId: string
+  items: CampaignContent[]
+  onSubmitted: () => void
+}) {
+  const client = useApiClient()
+  const api = createResourceApi(client)
+  const [rejectAllToDraft, setRejectAllToDraft] = useState(false)
+  const [approvals, setApprovals] = useState<
+    Record<string, { content: string; status: 'approved' | 'rejected' }>
+  >(() =>
+    Object.fromEntries(
+      items.map((item) => [item.id, { content: item.content, status: 'approved' as const }]),
+    ),
+  )
+
+  useEffect(() => {
+    setApprovals(
+      Object.fromEntries(
+        items.map((item) => [item.id, { content: item.content, status: 'approved' as const }]),
+      ),
+    )
+  }, [items])
+
+  const approveMutation = useMutation({
+    mutationFn: (payload: ContentApprovalItem[]) =>
+      api.approveCampaign(workspaceId, campaignId, {
+        contents: payload,
+        reject_all_to_draft: rejectAllToDraft,
+      }),
+    onSuccess: (data) => {
+      if (data.resuming) {
+        toast.success('Approval submitted — publishing approved content')
+      } else if (data.status === 'draft') {
+        toast.success('All content rejected — campaign returned to draft')
+      } else {
+        toast.success('Approval saved')
+      }
+      onSubmitted()
+    },
+    onError: () => toast.error('Failed to submit approval'),
+  })
+
+  const handleSubmit = () => {
+    const payload: ContentApprovalItem[] = items.map((item) => ({
+      id: item.id,
+      content: approvals[item.id]?.content ?? item.content,
+      status: approvals[item.id]?.status ?? 'approved',
+    }))
+    approveMutation.mutate(payload)
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
+        Review generated content before publishing. Only approved Twitter content will be
+        published in this phase; LinkedIn is saved for Phase 4.
+      </div>
+      <div className="grid gap-4">
+        {items.map((item) => (
+          <ContentCard
+            key={item.id}
+            workspaceId={workspaceId}
+            campaignId={campaignId}
+            item={item}
+            approvalMode
+            approvalState={approvals[item.id]}
+            onApprovalChange={(update) =>
+              setApprovals((prev) => ({
+                ...prev,
+                [item.id]: { ...prev[item.id], ...update },
+              }))
+            }
+          />
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-2">
+          <input
+            id="reject-all-draft"
+            type="checkbox"
+            className="size-4 rounded border"
+            checked={rejectAllToDraft}
+            onChange={(e) => setRejectAllToDraft(e.target.checked)}
+          />
+          <Label htmlFor="reject-all-draft" className="text-sm font-normal">
+            Reject all and return campaign to draft
+          </Label>
+        </div>
+        <Button onClick={handleSubmit} disabled={approveMutation.isPending}>
+          {approveMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+          Submit approval
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function CampaignOverview({
+  campaign,
+  knowledgeBase,
+}: {
+  campaign: Campaign
+  knowledgeBase: KnowledgeBase | undefined
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Campaign details</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4 text-sm">
+        <div>
+          <p className="font-medium text-muted-foreground">Status</p>
+          <div className="mt-1">
+            <CampaignStatusBadge status={campaign.status} />
+          </div>
+        </div>
+        <div>
+          <p className="font-medium text-muted-foreground">Objective</p>
+          <p className="mt-1 whitespace-pre-wrap">{campaign.objective}</p>
+        </div>
+        {campaign.target_audience && (
+          <div>
+            <p className="font-medium text-muted-foreground">Target audience</p>
+            <p className="mt-1">{campaign.target_audience}</p>
+          </div>
+        )}
+        {campaign.region && (
+          <div>
+            <p className="font-medium text-muted-foreground">Region</p>
+            <p className="mt-1">{campaign.region}</p>
+          </div>
+        )}
+        <div>
+          <p className="font-medium text-muted-foreground">Platforms</p>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {(campaign.platforms ?? []).map((p) => (
+              <PlatformBadge key={p} platform={p} />
+            ))}
+            {!campaign.platforms?.length && (
+              <span className="text-muted-foreground">None selected</span>
+            )}
+          </div>
+        </div>
+        <div>
+          <p className="font-medium text-muted-foreground">Knowledge base</p>
+          <p className="mt-1">
+            {knowledgeBase?.name ?? (
+              <span className="text-muted-foreground">Not linked</span>
+            )}
+          </p>
+        </div>
+        <div>
+          <p className="font-medium text-muted-foreground">Competitor URLs</p>
+          {campaign.competitor_urls?.length ? (
+            <ul className="mt-1 list-inside list-disc space-y-1">
+              {campaign.competitor_urls.map((url) => (
+                <li key={url}>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary underline-offset-4 hover:underline"
+                  >
+                    {url}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1 text-muted-foreground">None</p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 export function CampaignDetailPage({
   workspaceId,
   campaignId,
@@ -335,6 +596,8 @@ export function CampaignDetailPage({
 }) {
   const client = useApiClient()
   const api = createResourceApi(client)
+  const queryClient = useQueryClient()
+  const [sseConnected, setSseConnected] = useState(false)
 
   const workspaceQuery = useQuery({
     queryKey: queryKeys.workspace(workspaceId),
@@ -345,12 +608,72 @@ export function CampaignDetailPage({
     queryKey: queryKeys.campaign(workspaceId, campaignId),
     queryFn: () => api.getCampaign(workspaceId, campaignId),
     retry: (count, error) => !(isApiError(error, 404) || count > 1),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      if (sseConnected && status && STREAM_ACTIVE_STATUSES.has(status)) {
+        return false
+      }
+      return status && POLLING_STATUSES.has(status) ? 2000 : false
+    },
+  })
+
+  const handleStatusEvent = useCallback(
+    (status: CampaignStatus) => {
+      queryClient.setQueryData(queryKeys.campaign(workspaceId, campaignId), (old: Campaign | undefined) =>
+        old ? { ...old, status } : old,
+      )
+      if (status === 'approval_pending' || status === 'completed') {
+        queryClient.invalidateQueries({ queryKey: queryKeys.contents(workspaceId, campaignId) })
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.researchSnapshots(workspaceId, campaignId),
+        })
+      }
+    },
+    [campaignId, queryClient, workspaceId],
+  )
+
+  const campaign = campaignQuery.data
+  const prevStatusRef = useRef(campaign?.status)
+
+  useEffect(() => {
+    if (!campaign) return
+    if (
+      prevStatusRef.current !== campaign.status &&
+      (campaign.status === 'approval_pending' || campaign.status === 'completed')
+    ) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.contents(workspaceId, campaignId) })
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.researchSnapshots(workspaceId, campaignId),
+      })
+    }
+    prevStatusRef.current = campaign.status
+  }, [campaign, campaignId, queryClient, workspaceId])
+
+  const knowledgeBasesQuery = useQuery({
+    queryKey: queryKeys.knowledgeBases(workspaceId),
+    queryFn: () => api.listKnowledgeBases(workspaceId),
+    enabled: !!campaign?.knowledge_base_id,
   })
 
   const contentsQuery = useQuery({
     queryKey: queryKeys.contents(workspaceId, campaignId),
     queryFn: () => api.listContents(workspaceId, campaignId),
-    enabled: !!campaignQuery.data,
+    enabled: !!campaign,
+  })
+
+  const researchQuery = useQuery({
+    queryKey: queryKeys.researchSnapshots(workspaceId, campaignId),
+    queryFn: () => api.listResearchSnapshots(workspaceId, campaignId),
+    enabled: !!campaign && campaign.status !== 'draft',
+  })
+
+  const executeMutation = useMutation({
+    mutationFn: () => api.executeCampaign(workspaceId, campaignId),
+    onSuccess: () => {
+      toast.success('Campaign execution started')
+      queryClient.invalidateQueries({ queryKey: queryKeys.campaign(workspaceId, campaignId) })
+    },
+    onError: () => toast.error('Failed to start campaign execution'),
   })
 
   if (workspaceQuery.isLoading || campaignQuery.isLoading) {
@@ -362,7 +685,7 @@ export function CampaignDetailPage({
     )
   }
 
-  if (campaignQuery.isError || !campaignQuery.data) {
+  if (campaignQuery.isError || !campaign) {
     return (
       <AppShell workspaceId={workspaceId} workspaceName={workspaceQuery.data?.name}>
         <EmptyState
@@ -378,7 +701,15 @@ export function CampaignDetailPage({
     )
   }
 
-  const campaign = campaignQuery.data
+  const knowledgeBase = knowledgeBasesQuery.data?.items.find(
+    (kb) => kb.id === campaign.knowledge_base_id,
+  )
+  const latestResearch = researchQuery.data?.items[0]
+  const canRun =
+    campaign.status === 'draft' &&
+    !!campaign.knowledge_base_id &&
+    !executeMutation.isPending
+  const isRunning = POLLING_STATUSES.has(campaign.status)
 
   return (
     <AppShell workspaceId={workspaceId} workspaceName={workspaceQuery.data?.name}>
@@ -394,29 +725,128 @@ export function CampaignDetailPage({
             },
             { label: campaign.title },
           ]}
-          actions={<ContentCreateDialog workspaceId={workspaceId} campaignId={campaignId} />}
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <CampaignStatusBadge status={campaign.status} />
+              <Button
+                size="sm"
+                disabled={!canRun}
+                onClick={() => executeMutation.mutate()}
+              >
+                {executeMutation.isPending || isRunning ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Play className="size-4" />
+                )}
+                Run campaign
+              </Button>
+              <ContentCreateDialog workspaceId={workspaceId} campaignId={campaignId} />
+            </div>
+          }
         />
 
-        {contentsQuery.isLoading && <Skeleton className="h-32 w-full" />}
-        {!contentsQuery.isLoading && contentsQuery.data?.items.length === 0 && (
-          <EmptyState
-            title="No content yet"
-            description="Add platform-specific content for this campaign."
-            action={
-              <ContentCreateDialog workspaceId={workspaceId} campaignId={campaignId} />
-            }
-          />
+        {!campaign.knowledge_base_id && campaign.status === 'draft' && (
+          <p className="text-sm text-muted-foreground">
+            Link a knowledge base with an indexed brand PDF before running this campaign.
+          </p>
         )}
-        <div className="grid gap-4">
-          {contentsQuery.data?.items.map((item) => (
-            <ContentCard
-              key={item.id}
+
+        <Tabs defaultValue="overview">
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="research">Research</TabsTrigger>
+            <TabsTrigger value="content">Content</TabsTrigger>
+            <TabsTrigger value="activity">Activity</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="mt-4">
+            <CampaignOverview campaign={campaign} knowledgeBase={knowledgeBase} />
+          </TabsContent>
+
+          <TabsContent value="research" className="mt-4 space-y-4">
+            {researchQuery.isLoading && <Skeleton className="h-32 w-full" />}
+            {!researchQuery.isLoading && !latestResearch && (
+              <EmptyState
+                title="No research yet"
+                description="Run the campaign to generate a research snapshot."
+              />
+            )}
+            {latestResearch && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Latest research</CardTitle>
+                  <CardDescription>
+                    Generated {new Date(latestResearch.created_at).toLocaleString()}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="whitespace-pre-wrap text-sm">{latestResearch.summary}</p>
+                  {latestResearch.raw_data && (
+                    <details className="text-sm">
+                      <summary className="cursor-pointer text-muted-foreground">
+                        Raw research data
+                      </summary>
+                      <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-muted p-3 text-xs">
+                        {JSON.stringify(latestResearch.raw_data, null, 2)}
+                      </pre>
+                    </details>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="content" className="mt-4 space-y-4">
+            {campaign.status === 'approval_pending' && (contentsQuery.data?.items.length ?? 0) > 0 ? (
+              <ApprovalPanel
+                workspaceId={workspaceId}
+                campaignId={campaignId}
+                items={contentsQuery.data?.items ?? []}
+                onSubmitted={() => {
+                  queryClient.invalidateQueries({
+                    queryKey: queryKeys.campaign(workspaceId, campaignId),
+                  })
+                  queryClient.invalidateQueries({
+                    queryKey: queryKeys.contents(workspaceId, campaignId),
+                  })
+                }}
+              />
+            ) : (
+              <>
+                {contentsQuery.isLoading && <Skeleton className="h-32 w-full" />}
+                {!contentsQuery.isLoading && contentsQuery.data?.items.length === 0 && (
+                  <EmptyState
+                    title="No content yet"
+                    description="Run the campaign or add platform-specific content manually."
+                    action={
+                      <ContentCreateDialog workspaceId={workspaceId} campaignId={campaignId} />
+                    }
+                  />
+                )}
+                <div className="grid gap-4">
+                  {contentsQuery.data?.items.map((item) => (
+                    <ContentCard
+                      key={item.id}
+                      workspaceId={workspaceId}
+                      campaignId={campaignId}
+                      item={item}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+          </TabsContent>
+
+          <TabsContent value="activity" className="mt-4">
+            <AgentLogPanel
               workspaceId={workspaceId}
               campaignId={campaignId}
-              item={item}
+              campaignStatus={campaign.status}
+              onStatusEvent={handleStatusEvent}
+              onConnectionChange={setSseConnected}
             />
-          ))}
-        </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </AppShell>
   )

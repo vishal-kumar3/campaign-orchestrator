@@ -31,9 +31,23 @@ class Settings(BaseSettings):
     validation_alias="GEMINI_CHAT_MODEL",
   )
 
+  google_api_key: str = ""
+  tavily_api_key: str = ""
+  agent_max_competitor_urls: int = 5
+
   chunk_size_tokens: int = 500
   chunk_overlap_tokens: int = 50
   retrieve_default_k: int = 3
+
+  redis_url: str = "redis://localhost:6379/0"
+  sse_heartbeat_seconds: int = 15
+  sse_replay_log_limit: int = 50
+
+  publisher_dry_run: bool = True
+  twitter_api_key: str = ""
+  twitter_api_secret: str = ""
+  twitter_access_token: str = ""
+  twitter_access_token_secret: str = ""
 
   def ensure_upload_dir(self) -> Path:
     path = Path(self.upload_dir)

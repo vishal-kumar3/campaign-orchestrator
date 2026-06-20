@@ -1,11 +1,17 @@
 import type {
+  AgentLog,
+  AgentRun,
+  ApproveCampaignRequest,
+  ApproveCampaignResponse,
   Campaign,
   CampaignContent,
   Document,
   DocumentProcessResponse,
   DocumentUploadResponse,
+  ExecuteCampaignResponse,
   KnowledgeBase,
   PaginatedResponse,
+  ResearchSnapshot,
   RetrieveResponse,
   Workspace,
 } from '@/lib/types'
@@ -25,6 +31,12 @@ export const queryKeys = {
     ['workspaces', wsId, 'knowledge-bases', kbId, 'documents', id] as const,
   contents: (wsId: string, campId: string) =>
     ['workspaces', wsId, 'campaigns', campId, 'contents'] as const,
+  researchSnapshots: (wsId: string, campId: string) =>
+    ['workspaces', wsId, 'campaigns', campId, 'research-snapshots'] as const,
+  agentRuns: (wsId: string, campId: string) =>
+    ['workspaces', wsId, 'campaigns', campId, 'agent-runs'] as const,
+  agentLogs: (wsId: string, campId: string, runId: string) =>
+    ['workspaces', wsId, 'campaigns', campId, 'agent-runs', runId, 'logs'] as const,
 }
 
 export const apiPaths = {
@@ -32,6 +44,15 @@ export const apiPaths = {
   workspace: (id: string) => `/workspaces/${id}`,
   campaigns: (wsId: string) => `/workspaces/${wsId}/campaigns/`,
   campaign: (wsId: string, id: string) => `/workspaces/${wsId}/campaigns/${id}`,
+  campaignExecute: (wsId: string, id: string) => `/workspaces/${wsId}/campaigns/${id}/execute`,
+  campaignStream: (wsId: string, id: string) => `/workspaces/${wsId}/campaigns/${id}/stream`,
+  campaignApprove: (wsId: string, id: string) => `/workspaces/${wsId}/campaigns/${id}/approve`,
+  researchSnapshots: (wsId: string, campId: string) =>
+    `/workspaces/${wsId}/campaigns/${campId}/research-snapshots`,
+  agentRuns: (wsId: string, campId: string) =>
+    `/workspaces/${wsId}/campaigns/${campId}/agent-runs`,
+  agentLogs: (wsId: string, campId: string, runId: string) =>
+    `/workspaces/${wsId}/campaigns/${campId}/agent-runs/${runId}/logs`,
   knowledgeBases: (wsId: string) => `/workspaces/${wsId}/knowledge-bases/`,
   knowledgeBase: (wsId: string, id: string) => `/workspaces/${wsId}/knowledge-bases/${id}`,
   documents: (wsId: string, kbId: string) =>
@@ -70,6 +91,16 @@ export function createResourceApi(client: ApiClient) {
       client.patch<Campaign>(apiPaths.campaign(wsId, id), body),
     deleteCampaign: (wsId: string, id: string) =>
       client.delete<void>(apiPaths.campaign(wsId, id)),
+    executeCampaign: (wsId: string, id: string) =>
+      client.post<ExecuteCampaignResponse>(apiPaths.campaignExecute(wsId, id)),
+    approveCampaign: (wsId: string, id: string, body: ApproveCampaignRequest) =>
+      client.post<ApproveCampaignResponse>(apiPaths.campaignApprove(wsId, id), body),
+    listResearchSnapshots: (wsId: string, campId: string) =>
+      client.get<PaginatedResponse<ResearchSnapshot>>(apiPaths.researchSnapshots(wsId, campId)),
+    listAgentRuns: (wsId: string, campId: string) =>
+      client.get<PaginatedResponse<AgentRun>>(apiPaths.agentRuns(wsId, campId)),
+    listAgentLogs: (wsId: string, campId: string, runId: string) =>
+      client.get<PaginatedResponse<AgentLog>>(apiPaths.agentLogs(wsId, campId, runId)),
 
     listKnowledgeBases: (wsId: string) =>
       client.get<PaginatedResponse<KnowledgeBase>>(apiPaths.knowledgeBases(wsId)),

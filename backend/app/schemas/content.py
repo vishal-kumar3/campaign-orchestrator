@@ -29,5 +29,7 @@ class ContentResponse(BaseModel):
   title: str | None
   content: str
   status: ContentStatus
+  external_post_id: str | None = None
+  published_at: datetime | None = None
   created_at: datetime
   updated_at: datetime

@@ -1,5 +1,7 @@
 import io
 import logging
+import uuid
+from dataclasses import dataclass
 
 import tiktoken
 from pypdf import PdfReader
@@ -18,6 +20,44 @@ logger = logging.getLogger(__name__)
 
 _ENCODING = tiktoken.get_encoding("cl100k_base")
 _SEPARATORS = ["\n\n", "\n", ". ", " ", ""]
+
+
+@dataclass
+class BrandContextChunk:
+  chunk_id: uuid.UUID
+  document_id: uuid.UUID
+  chunk_index: int
+  content: str
+  score: float
+  metadata: dict | None
+
+
+def retrieve_brand_context(
+  session: Session,
+  *,
+  knowledge_base_id: uuid.UUID,
+  query: str,
+  k: int | None = None,
+) -> list[BrandContextChunk]:
+  limit = k or settings.retrieve_default_k
+  query_embedding = embeddings.embed_query(query)
+  results = document_chunk_queries.similarity_search(
+    session,
+    knowledge_base_id=knowledge_base_id,
+    query_embedding=query_embedding,
+    k=limit,
+  )
+  return [
+    BrandContextChunk(
+      chunk_id=chunk.id,
+      document_id=chunk.document_id,
+      chunk_index=chunk.chunk_index,
+      content=chunk.content,
+      score=max(0.0, 1.0 - distance),
+      metadata=chunk.metadata_,
+    )
+    for chunk, distance in results
+  ]
 
 
 def extract_pdf_text(pdf_bytes: bytes) -> str:

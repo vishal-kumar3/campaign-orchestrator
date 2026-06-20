@@ -21,11 +21,13 @@ const campaignStatusVariant: Record<
 
 const contentStatusVariant: Record<
   ContentStatus,
-  'secondary' | 'success' | 'destructive'
+  'secondary' | 'success' | 'destructive' | 'warning' | 'outline'
 > = {
   draft: 'secondary',
   approved: 'success',
   rejected: 'destructive',
+  published: 'success',
+  failed: 'destructive',
 }
 
 const documentStatusVariant: Record<

@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: agent
+Version: 0.1.0
+Summary: Add your description here
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+Requires-Dist: httpx>=0.28.0
+Requires-Dist: langchain-core>=1.4.1
+Requires-Dist: langchain-google-genai>=2.0.0
+Requires-Dist: langgraph>=1.2.4
+Requires-Dist: langgraph-checkpoint-postgres>=2.0.0
+Requires-Dist: langsmith>=0.8.9
+Requires-Dist: psycopg-pool>=3.2.0
+Requires-Dist: tavily-python>=0.5.0

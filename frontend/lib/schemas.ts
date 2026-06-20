@@ -9,7 +9,13 @@ export const campaignStatusSchema = z.enum([
   'completed',
   'failed',
 ])
-export const contentStatusSchema = z.enum(['draft', 'approved', 'rejected'])
+export const contentStatusSchema = z.enum([
+  'draft',
+  'approved',
+  'rejected',
+  'published',
+  'failed',
+])
 export const knowledgeScopeSchema = z.enum(['workspace', 'campaign'])
 
 export const workspaceCreateSchema = z.object({
@@ -28,6 +34,11 @@ export const campaignCreateSchema = z.object({
   target_audience: z.string().trim().optional().or(z.literal('')),
   region: z.string().trim().optional().or(z.literal('')),
   platforms: z.array(contentPlatformSchema).optional(),
+  knowledge_base_id: z.string().uuid().optional().or(z.literal('')),
+  competitor_urls: z
+    .array(z.string().trim().url('Enter a valid URL'))
+    .max(5, 'At most 5 competitor URLs')
+    .optional(),
 })
 
 export const campaignUpdateSchema = campaignCreateSchema.partial().extend({

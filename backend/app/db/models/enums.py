@@ -37,6 +37,8 @@ class ContentStatus(PyEnum):
   DRAFT = "draft"
   APPROVED = "approved"
   REJECTED = "rejected"
+  PUBLISHED = "published"
+  FAILED = "failed"
 
 
 class AgentStatus(PyEnum):
